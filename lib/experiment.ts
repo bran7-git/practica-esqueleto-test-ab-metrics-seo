@@ -71,14 +71,35 @@ export function emptyLog(): ExperimentLog {
   }
 }
 
-export function assignVariant(_visitorId: string): Variant {
-  // TODO: hash estable. El mismo id tiene que devolver siempre la misma variante.
-  return 'a'
+/**
+ * Algoritmo FNV-1a de 32 bits para obtener un hash determinístico de un string.
+ */
+export function hashString(str: string): number {
+  let hash = 2166136261
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24)
+  }
+  return hash >>> 0
 }
 
-export function conversionRate(_stats: VariantStats): number | null {
-  // TODO: conversiones / impresiones. Sin impresiones, devolver null, no 0.
-  return null
+/**
+ * Asigna de forma determinística la variante ('a' o 'b') según el ID del visitante.
+ */
+export function assignVariant(visitorId: string): Variant {
+  if (!visitorId) return 'a'
+  const hash = hashString(visitorId)
+  return hash % 2 === 0 ? 'a' : 'b'
+}
+
+/**
+ * Calcula la tasa de conversión (0..1). Si no hay impresiones, retorna null.
+ */
+export function conversionRate(stats: VariantStats): number | null {
+  if (!stats || stats.impressions <= 0) {
+    return null
+  }
+  return stats.conversions / stats.impressions
 }
 
 export function rateGap(log: ExperimentLog): number | null {
@@ -88,8 +109,30 @@ export function rateGap(log: ExperimentLog): number | null {
   return (treatment - control) * 100
 }
 
-export function parseLog(_raw: string | undefined): ExperimentLog {
-  // TODO: validar el JSON antes de usarlo. Si falla, log vacío.
+/**
+ * Valida y parsea el log de eventos en formato JSON.
+ */
+export function parseLog(raw: string | undefined): ExperimentLog {
+  if (!raw) return emptyLog()
+
+  try {
+    const parsed = JSON.parse(raw)
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'a' in parsed &&
+      'b' in parsed &&
+      typeof parsed.a?.impressions === 'number' &&
+      typeof parsed.a?.conversions === 'number' &&
+      typeof parsed.b?.impressions === 'number' &&
+      typeof parsed.b?.conversions === 'number'
+    ) {
+      return parsed as ExperimentLog
+    }
+  } catch {
+    // Si la lectura o deserialización falla, retorna el log vacío de respaldo.
+  }
+
   return emptyLog()
 }
 
